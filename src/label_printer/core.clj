@@ -72,10 +72,10 @@
     (.drawImage content image (float (inches->pu x)) (float (inches->pu y))
                 (float (* w sf)) (float (* h sf)))))
 
-(defn generate-qr-code [url size]
+(defn generate-qr-code [url]
   (let [writer (QRCodeWriter.)
-        matrix (.encode writer url BarcodeFormat/QR_CODE size size
-                        {EncodeHintType/MARGIN           1
+        matrix (.encode writer url BarcodeFormat/QR_CODE 1000 1000
+                        {EncodeHintType/MARGIN           2
                          EncodeHintType/ERROR_CORRECTION ErrorCorrectionLevel/L})
         image-buffer (MatrixToImageWriter/toBufferedImage matrix)]
     image-buffer))
@@ -90,7 +90,7 @@
   (PDImageXObject/createFromByteArray
     doc
     (buffered-image->byte-array
-      (generate-qr-code (str "senzed.nl/" (rand-str 6)) 72)) "code"))
+      (generate-qr-code (str "senzed.nl/" (rand-str 6)))) "code"))
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -105,5 +105,5 @@
                                                   true true)]
           (doseq [[x y] (get-labels L7163)]
             (draw-image! content image x y 3.9 1.5)
-            (draw-image! content (random-qr-code-image doc) (+ x 2.65) (+ y 0.25) 1 1))))
+            (draw-image! content (random-qr-code-image doc) (+ x 2.55) (+ y 0.15) 1.2 1.2))))
       (.save doc "target/test-pdf.pdf"))))
