@@ -12,7 +12,10 @@
            (com.google.zxing.qrcode.decoder ErrorCorrectionLevel)
            (java.io ByteArrayOutputStream)
            (javax.imageio ImageIO)
-           (java.awt.image BufferedImage)))
+           (java.awt.image BufferedImage)
+           (org.apache.pdfbox.pdmodel.font PDType1Font)
+           (org.apache.pdfbox.pdmodel.graphics.color PDColor)
+           (java.awt Color)))
 
 
 (defn rand-str [len]
@@ -90,20 +93,77 @@
   (PDImageXObject/createFromByteArray
     doc
     (buffered-image->byte-array
-      (generate-qr-code (str "senzed.nl/" (rand-str 6)))) "code"))
+      (generate-qr-code (str "senzd.nl/" (rand-str 6)))) "code"))
+
+(def layouts
+  { "kadaster" {:name "Kadaster"
+                :background (io/resource "L7163-background-kadaster.png")
+                :font-color (Color/WHITE)
+                :top-offset 0.35}
+    "RWS" {:name "Rijkswaterstaat"
+           :background (io/resource "L7163-background-RWS.png")
+           :font-color (Color/BLACK)
+           :top-offset 1.0   }
+   "nijmegen" {:name "Nijmegen"
+          :background (io/resource "L7163-background-nijmegen.png")
+          :font-color (Color/BLACK)
+          :top-offset 0.50   }
+   "eindhoven" {:name "Eindhoven"
+               :background (io/resource "L7163-background-eindhoven.png")
+               :font-color (Color/BLACK)
+               :top-offset 0.50   }
+   "amsterdam" {:name "Amsterdam"
+                :background (io/resource "L7163-background-amsterdam.png")
+                :font-color (Color/WHITE)
+                :top-offset 0.35   }})
+
+
+(defn add-label-page! [doc layout]
+  (let [size-x 3.9
+        size-y 1.5
+        text-y (- size-y (:top-offset layout))
+        image-buffer (resource->byte-array (:background layout))
+        page (PDPage. PDRectangle/A4)
+        _ (doto doc (.addPage page))
+        image (PDImageXObject/createFromByteArray doc image-buffer "bg")]
+    (with-open [^PDPageContentStream content (PDPageContentStream. doc
+                                                                   page PDPageContentStream$AppendMode/OVERWRITE
+                                                                   true true)]
+      (doseq [[x y] (get-labels L7163)]
+        (draw-image! content image x y size-x size-y)
+        (draw-image! content (random-qr-code-image doc) (+ x 2.55) (+ y 0.15) 1.2 1.2)
+        (doto content
+          (.setNonStrokingColor ^Color (:font-color layout))
+          (.beginText)
+          (.setFont PDType1Font/HELVETICA (inches->pu 0.21))
+          (.newLineAtOffset (inches->pu (+ x 0.15)) (inches->pu (+ y text-y)))
+          (.showText "Wat meet deze sensor?")
+          (.endText)
+
+          (.beginText)
+          (.setFont PDType1Font/HELVETICA (inches->pu 0.12))
+          (.newLineAtOffset (inches->pu (+ x 0.15)) (inches->pu (+ y (- text-y 0.2))))
+          (.showText "Scan QR code voor meer informatie")
+          (.endText)
+
+          ;(.beginText)
+          ;(.setFont PDType1Font/HELVETICA (inches->pu 0.09))
+          ;(.newLineAtOffset (inches->pu (+ x 0.15)) (inches->pu (+ y 0.1)))
+          ;(.showText (str "Powered by " (:name layout)))
+          ;(.endText)
+
+          (.saveGraphicsState)
+          )))))
+
 
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (let [image-buffer (resource->byte-array (io/resource "L7163-background.png"))]
+  (doseq [[layout-key layout] layouts]
     (with-open [doc (PDDocument.)]
-      (let [page (PDPage. PDRectangle/A4)
-            _ (doto doc (.addPage page))
-            image (PDImageXObject/createFromByteArray doc image-buffer "bg")]
-        (with-open [^PDPageContentStream content (PDPageContentStream. doc
-                                                  page PDPageContentStream$AppendMode/OVERWRITE
-                                                  true true)]
-          (doseq [[x y] (get-labels L7163)]
-            (draw-image! content image x y 3.9 1.5)
-            (draw-image! content (random-qr-code-image doc) (+ x 2.55) (+ y 0.15) 1.2 1.2))))
-      (.save doc "target/test-pdf.pdf"))))
+      (add-label-page! doc layout)
+      (.save doc (format "target/test-pdf-%s.pdf", layout-key))))
+  (with-open [doc (PDDocument.)]
+    (doseq [[layout-key layout] layouts]
+      (add-label-page! doc layout))
+    (.save doc "target/test-pdf-all.pdf")))
